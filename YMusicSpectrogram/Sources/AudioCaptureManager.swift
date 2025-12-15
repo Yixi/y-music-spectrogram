@@ -263,26 +263,31 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
             return
         }
         
+        // Verify audio format is Float32 PCM (Linear PCM)
+        let formatID = streamDescription.mFormatID
+        let bitsPerChannel = streamDescription.mBitsPerChannel
+        guard formatID == kAudioFormatLinearPCM && bitsPerChannel == 32 else {
+            print("⚠️ Unexpected audio format: formatID=\(formatID), bitsPerChannel=\(bitsPerChannel)")
+            return
+        }
+        
         // Convert to Float array for processing
         let channelCount = Int(streamDescription.mChannelsPerFrame)
         let frameCount = length / (MemoryLayout<Float>.size * channelCount)
         
-        // Interpret data as Float array
-        let floatData = data.withMemoryRebound(to: Float.self, capacity: length / MemoryLayout<Float>.size) { pointer in
-            return pointer
-        }
-        
-        // Extract first channel or mix stereo to mono
+        // Extract samples within the safe memory scope
         var samples = [Float](repeating: 0, count: frameCount)
-        if channelCount == 1 {
-            // Mono audio
-            for i in 0..<frameCount {
-                samples[i] = floatData[i]
-            }
-        } else if channelCount == 2 {
-            // Stereo audio - mix to mono
-            for i in 0..<frameCount {
-                samples[i] = (floatData[i * 2] + floatData[i * 2 + 1]) / 2.0
+        data.withMemoryRebound(to: Float.self, capacity: length / MemoryLayout<Float>.size) { floatPointer in
+            if channelCount == 1 {
+                // Mono audio - direct copy
+                for i in 0..<frameCount {
+                    samples[i] = floatPointer[i]
+                }
+            } else if channelCount == 2 {
+                // Stereo audio - mix to mono
+                for i in 0..<frameCount {
+                    samples[i] = (floatPointer[i * 2] + floatPointer[i * 2 + 1]) / 2.0
+                }
             }
         }
         

@@ -24,8 +24,6 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs access to the microphone as a fallback if screen recording is not available for audio spectrum visualization.</string>
-	<key>NSSystemExtensionUsageDescription</key>
-	<string>This app uses ScreenCaptureKit to capture system audio for real-time spectrum visualization.</string>
 	<key>NSScreenCaptureDescription</key>
 	<string>This app needs screen recording permission to capture system audio output for spectrum visualization.</string>
 	<key>NSPrincipalClass</key>
