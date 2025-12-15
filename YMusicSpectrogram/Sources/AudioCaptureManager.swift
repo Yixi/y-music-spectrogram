@@ -80,20 +80,23 @@ class AudioCaptureManager: NSObject {
     }
     
     private func startScreenCaptureAudio() async throws {
+        // Check if we can get screen recording permission FIRST
+        // This triggers the system prompt if not yet determined
+        guard await requestScreenRecordingPermission() else {
+            // If false, it means either denied OR user hasn't responded yet.
+            // Since we can't wait for the response, we have to assume we can't proceed with SCKit right now.
+            throw NSError(
+                domain: "AudioCaptureManager",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Screen recording permission not granted"]
+            )
+        }
+        
         // Get available content for screen capture
         let availableContent = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: true
         )
-        
-        // Check if we can get screen recording permission
-        guard await requestScreenRecordingPermission() else {
-            throw NSError(
-                domain: "AudioCaptureManager",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Screen recording permission denied"]
-            )
-        }
         
         // Configure stream to capture system audio
         let streamConfig = SCStreamConfiguration()
@@ -203,7 +206,6 @@ class AudioCaptureManager: NSObject {
         guard let channelData = buffer.floatChannelData else { return }
         
         let frameLength = Int(buffer.frameLength)
-        let channelCount = Int(buffer.format.channelCount)
         
         // Get samples from first channel (mono or first channel of stereo)
         let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))

@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:y-music-spectrogram}",
+            "name": "Debug YMusicSpectrogram",
+            "target": "YMusicSpectrogram",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug YMusicSpectrogram"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:y-music-spectrogram}",
+            "name": "Release YMusicSpectrogram",
+            "target": "YMusicSpectrogram",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release YMusicSpectrogram"
+        }
+    ]
+}

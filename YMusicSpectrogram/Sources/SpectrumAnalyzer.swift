@@ -78,17 +78,24 @@ class SpectrumAnalyzer: ObservableObject {
         )
         
         // Calculate magnitudes: sqrt(real^2 + imag^2)
-        var halfSize = fftSize / 2
-        vDSP_zvmags(
-            &realParts,
-            1,
-            &magnitudes,
-            1,
-            vDSP_Length(halfSize)
-        )
+        let halfSize = fftSize / 2
+        
+        realParts.withUnsafeMutableBufferPointer { realPtr in
+            imaginaryParts.withUnsafeMutableBufferPointer { imagPtr in
+                guard let realBase = realPtr.baseAddress, let imagBase = imagPtr.baseAddress else { return }
+                var splitComplex = DSPSplitComplex(realp: realBase, imagp: imagBase)
+                vDSP_zvmags(
+                    &splitComplex,
+                    1,
+                    &magnitudes,
+                    1,
+                    vDSP_Length(halfSize)
+                )
+            }
+        }
         
         // Convert to dB scale and normalize
-        var normalizedMagnitudes = magnitudes.map { magnitude -> Float in
+        let normalizedMagnitudes = magnitudes.map { magnitude -> Float in
             let db = 10 * log10(max(magnitude, 1e-10))
             // Normalize to 0-1 range (assuming -80 to 0 dB range)
             return max(0, min(1, (db + 80) / 80))

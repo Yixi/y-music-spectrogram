@@ -26,6 +26,11 @@ class MenuBarController: NSObject {
         audioCaptureManager = AudioCaptureManager(spectrumAnalyzer: spectrumAnalyzer)
         
         super.init()
+        
+        // Auto-start capture
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.startCapture()
+        }
     }
     
     func setupStatusBarButton(_ button: NSStatusBarButton) {
@@ -68,11 +73,11 @@ class MenuBarController: NSObject {
     }
     
     @objc func startCapture() {
-        audioCaptureManager?.startCapture()
+        audioCaptureManager.startCapture()
     }
     
     @objc func stopCapture() {
-        audioCaptureManager?.stopCapture()
+        audioCaptureManager.stopCapture()
     }
     
     @objc func quit() {
