@@ -52,10 +52,12 @@ This guide will help you set up and run the Y Music Spectrogram application on y
 
 When you first launch the application:
 
-1. **Microphone Permission**: 
-   - A system dialog will appear requesting microphone access
-   - Click "OK" to allow audio capture
-   - You can manage this later in System Preferences > Security & Privacy > Privacy > Microphone
+1. **Screen Recording Permission** (for system audio capture): 
+   - A system dialog will appear requesting Screen Recording permission
+   - Click "Open System Settings" or go to System Settings > Privacy & Security > Screen Recording
+   - Check the box next to "YMusicSpectrogram"
+   - **Important**: Quit and restart the app for the permission to take effect
+   - This permission allows the app to capture system audio using ScreenCaptureKit
 
 2. **Menu Bar Display**:
    - Look for the spectrum visualizer in your menu bar (top-right area)
@@ -67,51 +69,59 @@ When you first launch the application:
      - "Stop Capture" - Pause audio capture  
      - "Quit" - Exit the application
 
-## Capturing System Audio
+4. **Start Capturing**:
+   - Play any audio on your Mac (music, videos, games, etc.)
+   - The visualizer will respond to ALL system audio output!
 
-⚠️ **Important**: The default implementation captures microphone input. To capture system audio (music playback), follow these steps:
+## System Audio Capture
 
-### Using BlackHole (Free, Recommended)
+✅ **Native System Audio Capture**: This application uses **ScreenCaptureKit** to capture system audio directly!
+
+### How It Works
+
+The app uses Apple's ScreenCaptureKit API (macOS 13+) to capture all system audio:
+- **No virtual audio drivers needed** - works out of the box
+- **Captures everything** - music, videos, games, notifications, etc.
+- **High quality** - 48kHz stereo audio capture
+- **Low latency** - real-time visualization
+
+### Grant Screen Recording Permission
+
+1. Launch Y Music Spectrogram
+2. When prompted, click "Open System Settings"
+3. In Privacy & Security > Screen Recording, enable the app
+4. Quit and restart the app
+5. Click "Start Capture" and play any audio!
+
+**Note**: The app only captures audio - it never actually records your screen. Screen Recording permission is required by macOS for audio capture APIs.
+
+### Fallback Mode
+
+If you don't grant screen recording permission:
+- The app automatically falls back to **microphone input**
+- Play audio near your microphone, or
+- Optionally use BlackHole for audio routing (see below)
+
+### Alternative: BlackHole (Optional)
+
+If you prefer not to grant screen recording permission, you can use BlackHole:
 
 1. **Install BlackHole**:
    ```bash
-   # Using Homebrew
    brew install blackhole-2ch
-   
-   # Or download from GitHub
-   # https://github.com/ExistentialAudio/BlackHole
    ```
 
-2. **Configure Multi-Output Device**:
+2. **Configure Audio MIDI Setup**:
    - Open "Audio MIDI Setup" (in Applications > Utilities)
-   - Click the "+" button at bottom-left
-   - Select "Create Multi-Output Device"
-   - Check both your speakers/headphones AND BlackHole 2ch
-   - Right-click the Multi-Output Device and select "Use This Device For Sound Output"
-
-3. **Configure Application**:
-   - In System Preferences > Sound > Input
-   - Select "BlackHole 2ch" as the input device
-   - Launch Y Music Spectrogram
-
-4. **Start Capturing**:
-   - Play music in any application
-   - Right-click the menu bar item and select "Start Capture"
-   - You should see the spectrum visualizer responding to your music!
-
-### Using ScreenCaptureKit (macOS 13+, Advanced)
-
-This requires code modifications to use Apple's ScreenCaptureKit API:
-
-- Captures audio from specific applications
-- Requires Screen Recording permission
-- See `AudioCaptureManager.swift` comments for implementation notes
+   - Create a Multi-Output Device with your speakers + BlackHole
+   - Set it as your sound output
+   - App will capture audio via microphone mode
 
 ### Using Loopback (Commercial)
 
-- Purchase and install [Loopback](https://rogueamoeba.com/loopback/) from Rogue Amoeba
-- Create a virtual audio device routing system audio to an input
-- More flexible but requires a paid license
+- Professional solution from [Rogue Amoeba](https://rogueamoeba.com/loopback/)
+- More advanced audio routing capabilities
+- Paid software but very flexible
 
 ## Troubleshooting
 
@@ -130,11 +140,13 @@ This requires code modifications to use Apple's ScreenCaptureKit API:
 **Symptoms**: App is running but bars don't move
 
 **Solutions**:
-1. Verify microphone permission is granted
-   - System Preferences > Security & Privacy > Privacy > Microphone
-2. Click "Start Capture" in the menu
-3. Check input device in System Preferences > Sound > Input
-4. Make some noise near your microphone or play audio
+1. Verify Screen Recording permission is granted
+   - System Settings > Privacy & Security > Screen Recording
+   - Enable YMusicSpectrogram
+2. **Quit and restart** the app after granting permission
+3. Click "Start Capture" in the menu
+4. Play any audio on your Mac (music, videos, etc.)
+5. Check Console.app for error messages if still not working
 
 ### Build Fails
 
@@ -155,12 +167,15 @@ This requires code modifications to use Apple's ScreenCaptureKit API:
 
 ### Permission Denied
 
-**Symptoms**: "Operation not permitted" errors
+**Symptoms**: "Operation not permitted" errors or "Screen recording permission denied"
 
 **Solutions**:
-1. Grant microphone access in System Preferences
-2. For ScreenCaptureKit: Grant Screen Recording permission
-3. Restart the application after granting permissions
+1. Grant Screen Recording permission in System Settings
+   - Privacy & Security > Screen Recording
+   - Check the box for YMusicSpectrogram
+2. Quit and restart the app (permission requires app restart)
+3. If you prefer not to grant this permission, the app will fall back to microphone mode
+4. For microphone fallback: Grant microphone access if prompted
 
 ### High CPU Usage
 

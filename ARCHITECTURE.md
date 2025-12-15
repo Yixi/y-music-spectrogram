@@ -111,43 +111,64 @@ Y Music Spectrogram is a macOS menu bar application that provides real-time audi
 **File**: `AudioCaptureManager.swift`
 
 **Responsibilities**:
-- Capture audio from microphone
-- Request and manage audio permissions
-- Process audio buffers
+- Capture system audio using ScreenCaptureKit
+- Request and manage screen recording permissions
+- Fallback to microphone if ScreenCaptureKit unavailable
+- Process audio buffers from multiple sources
 - Forward samples to SpectrumAnalyzer
 
 **Technologies Used**:
-- `AVAudioEngine`: Core audio capture engine
-- `AVAudioInputNode`: Microphone input
-- `AVCaptureDevice`: Permission management
+- `ScreenCaptureKit`: Native system audio capture (primary)
+- `SCStream`: Audio stream management
+- `SCStreamOutput`: Audio sample buffer handling
+- `AVAudioEngine`: Fallback microphone capture
+- `CMSampleBuffer`: Audio data from ScreenCaptureKit
 
 **Configuration**:
-- Sample Rate: 44.1 kHz (CD quality)
+- Sample Rate: 48 kHz (ScreenCaptureKit) / 44.1 kHz (microphone fallback)
 - Buffer Size: 4096 frames
 - Format: Float32 PCM
+- Channels: Stereo (mixed to mono for processing)
 
-**Audio Pipeline**:
+**Primary Audio Pipeline (ScreenCaptureKit)**:
+```
+[System Audio] → [SCStream] → [SCStreamOutput] → [CMSampleBuffer]
+→ [Float Array] → [SpectrumAnalyzer]
+```
+
+**Fallback Audio Pipeline (Microphone)**:
 ```
 [Microphone] → [AVAudioEngine] → [InputNode] → [installTap] 
 → [PCMBuffer] → [Float Array] → [SpectrumAnalyzer]
 ```
 
 **Permission Handling**:
-- Checks authorization status
-- Requests access if needed
-- Handles denial gracefully
-- Uses NSMicrophoneUsageDescription from Info.plist
+- Checks screen recording authorization (CGPreflightScreenCaptureAccess)
+- Requests screen recording permission if needed (CGRequestScreenCaptureAccess)
+- Automatically falls back to microphone if screen recording denied
+- Uses NSScreenCaptureDescription from Info.plist
+- Handles microphone permission for fallback mode
 
 **Design Decisions**:
-- MVP uses microphone (easy to implement, works everywhere)
-- Includes extensive comments about system audio capture options
-- Clean start/stop lifecycle
-- Proper resource cleanup in deinit
+- **ScreenCaptureKit first**: Provides native system audio capture without virtual drivers
+- **Automatic fallback**: Gracefully degrades to microphone if permission denied
+- **Audio-only capture**: Configures minimal video (1x1) to reduce overhead
+- **Async/await pattern**: Modern Swift concurrency for permission handling
+- **Clean lifecycle**: Proper stream cleanup and resource management
 
-**Future Enhancements**:
-- ScreenCaptureKit integration for macOS 13+
-- BlackHole driver detection and setup guidance
-- Audio device selection UI
+**Implementation Details**:
+- `AudioStreamOutput` class implements `SCStreamOutput` protocol
+- Processes `CMSampleBuffer` audio data in real-time
+- Converts Core Media audio format to Float arrays
+- Handles both mono and stereo audio (mixes stereo to mono)
+- High-priority dispatch queue for audio processing
+
+**Advantages of ScreenCaptureKit**:
+- No virtual audio drivers required (BlackHole, Loopback)
+- Captures all system audio output natively
+- Works with any application playing audio
+- Lower latency than virtual audio routing
+- Native macOS 13+ integration
 
 ### 5. SpectrumAnalyzer
 
