@@ -9,30 +9,30 @@ import Cocoa
 import SwiftUI
 
 class MenuBarController: NSObject {
-    private var audioCaptureManager: AudioCaptureManager?
-    private var spectrumAnalyzer: SpectrumAnalyzer?
-    private var visualizerView: SpectrumVisualizerView?
+    private let audioCaptureManager: AudioCaptureManager
+    private let spectrumAnalyzer: SpectrumAnalyzer
+    private let visualizerView: SpectrumVisualizerView
     private var hostingView: NSHostingView<SpectrumVisualizerView>?
     private var statusBarButton: NSStatusBarButton?
     
     override init() {
-        super.init()
-        
         // Initialize spectrum analyzer
         spectrumAnalyzer = SpectrumAnalyzer()
         
         // Initialize visualizer view
-        visualizerView = SpectrumVisualizerView(spectrumAnalyzer: spectrumAnalyzer!)
+        visualizerView = SpectrumVisualizerView(spectrumAnalyzer: spectrumAnalyzer)
         
         // Initialize audio capture manager
-        audioCaptureManager = AudioCaptureManager(spectrumAnalyzer: spectrumAnalyzer!)
+        audioCaptureManager = AudioCaptureManager(spectrumAnalyzer: spectrumAnalyzer)
+        
+        super.init()
     }
     
     func setupStatusBarButton(_ button: NSStatusBarButton) {
         self.statusBarButton = button
         
         // Create hosting view for SwiftUI content
-        hostingView = NSHostingView(rootView: visualizerView!)
+        hostingView = NSHostingView(rootView: visualizerView)
         hostingView?.frame = NSRect(x: 0, y: 0, width: 150, height: 22)
         
         // Add hosting view to button

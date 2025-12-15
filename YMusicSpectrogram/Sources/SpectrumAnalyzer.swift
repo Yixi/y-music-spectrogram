@@ -114,9 +114,10 @@ class SpectrumAnalyzer: ObservableObject {
         // This gives more resolution to lower frequencies (bass/mids)
         for i in 0..<numberOfBands {
             let bandPosition = Float(i) / Float(numberOfBands)
-            // Logarithmic scale
-            let startIndex = Int(pow(Float(magnitudeCount), bandPosition))
-            let endIndex = Int(pow(Float(magnitudeCount), Float(i + 1) / Float(numberOfBands)))
+            let nextBandPosition = Float(i + 1) / Float(numberOfBands)
+            // Logarithmic scale: use exp(log(max) * position) for proper distribution
+            let startIndex = Int(exp(log(Float(magnitudeCount)) * bandPosition))
+            let endIndex = Int(exp(log(Float(magnitudeCount)) * nextBandPosition))
             
             let clampedStart = min(startIndex, magnitudeCount - 1)
             let clampedEnd = min(endIndex, magnitudeCount)
