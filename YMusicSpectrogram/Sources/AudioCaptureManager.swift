@@ -8,11 +8,10 @@
 //  - Uses ScreenCaptureKit (macOS 13+) to capture system audio streams
 //  - Requires Screen Recording permission in System Settings
 //  - Captures audio from all system output without virtual audio drivers
-//  - Falls back to microphone input if ScreenCaptureKit is unavailable
 //
 
-import AVFoundation
 import CoreAudio
+import CoreMedia
 import Foundation
 import ScreenCaptureKit
 
@@ -25,13 +24,8 @@ class AudioCaptureManager: NSObject {
     private var stream: SCStream?
     private var streamOutput: AudioStreamOutput?
     
-    // Fallback to AVAudioEngine for older systems or if ScreenCaptureKit fails
-    private var audioEngine: AVAudioEngine?
-    private var inputNode: AVAudioInputNode?
-    
     // Audio format configuration
     private let sampleRate: Double = 48000.0 // ScreenCaptureKit uses 48kHz
-    private let bufferSize: AVAudioFrameCount = 4096
     
     init(spectrumAnalyzer: SpectrumAnalyzer) {
         self.spectrumAnalyzer = spectrumAnalyzer
@@ -46,10 +40,7 @@ class AudioCaptureManager: NSObject {
             do {
                 try await startScreenCaptureAudio()
             } catch {
-                print("⚠️ ScreenCaptureKit not available: \(error.localizedDescription)")
-                print("ℹ️ Falling back to microphone input")
-                // Fallback to microphone
-                await startMicrophoneCapture()
+                print("⚠️ ScreenCaptureKit error: \(error.localizedDescription)")
             }
         }
     }
@@ -70,10 +61,6 @@ class AudioCaptureManager: NSObject {
                 }
             }
         }
-        
-        // Stop microphone fallback
-        audioEngine?.stop()
-        inputNode?.removeTap(onBus: 0)
         
         isCapturing = false
         print("⏹️ Audio capture stopped")
@@ -147,71 +134,6 @@ class AudioCaptureManager: NSObject {
         
         // Request permission
         return CGRequestScreenCaptureAccess()
-    }
-    
-    private func startMicrophoneCapture() async {
-        // Setup audio engine if not already done
-        if audioEngine == nil {
-            audioEngine = AVAudioEngine()
-            inputNode = audioEngine?.inputNode
-        }
-        
-        // Request microphone permission
-        let granted = await requestMicrophonePermission()
-        guard granted else {
-            print("❌ Microphone permission denied")
-            return
-        }
-        
-        guard let audioEngine = audioEngine,
-              let inputNode = inputNode else {
-            print("❌ Audio engine not initialized")
-            return
-        }
-        
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        
-        // Install tap on input node to receive audio buffers
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
-            self?.processAudioBuffer(buffer)
-        }
-        
-        do {
-            try audioEngine.start()
-            isCapturing = true
-            print("🎤 Microphone audio capture started (fallback)")
-        } catch {
-            print("❌ Failed to start audio engine: \(error.localizedDescription)")
-        }
-    }
-    
-    private func requestMicrophonePermission() async -> Bool {
-        return await withCheckedContinuation { continuation in
-            switch AVCaptureDevice.authorizationStatus(for: .audio) {
-            case .authorized:
-                continuation.resume(returning: true)
-            case .notDetermined:
-                AVCaptureDevice.requestAccess(for: .audio) { granted in
-                    continuation.resume(returning: granted)
-                }
-            case .denied, .restricted:
-                continuation.resume(returning: false)
-            @unknown default:
-                continuation.resume(returning: false)
-            }
-        }
-    }
-    
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData else { return }
-        
-        let frameLength = Int(buffer.frameLength)
-        
-        // Get samples from first channel (mono or first channel of stereo)
-        let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-        
-        // Send samples to spectrum analyzer
-        spectrumAnalyzer.processSamples(samples)
     }
     
     deinit {

@@ -22,10 +22,6 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs access to the microphone as a fallback if screen recording is not available for audio spectrum visualization.</string>
-	<key>NSScreenCaptureDescription</key>
-	<string>This app needs screen recording permission to capture system audio output for spectrum visualization.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>
