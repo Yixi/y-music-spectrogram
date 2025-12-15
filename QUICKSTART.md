@@ -40,18 +40,22 @@ swift build -c release
 # (Look in the top-right corner of your screen)
 ```
 
-## 4. Grant Permissions
+## 4. Grant Screen Recording Permission
 
 When you first run the app:
-1. A dialog will appear asking for **Microphone access**
-2. Click **OK** to allow
-3. The spectrum visualizer should now appear in your menu bar!
+1. A dialog will appear asking for **Screen Recording** permission
+2. Click **Open System Settings**
+3. In Privacy & Security > Screen Recording, check the box next to **YMusicSpectrogram**
+4. **Quit and restart** the app for the permission to take effect
+5. The spectrum visualizer will appear in your menu bar!
+
+**Why Screen Recording?** The app uses ScreenCaptureKit to capture system audio - this requires screen recording permission but doesn't actually record your screen.
 
 ## 5. Start Capturing Audio
 
 1. Right-click the spectrum visualizer in your menu bar
 2. Select **"Start Capture"**
-3. Make some noise or play music - the bars should start moving!
+3. Play any music, video, or audio on your Mac - the bars should start moving!
 
 ## What You Should See
 
@@ -62,28 +66,25 @@ In your menu bar, you'll see 32 animated bars:
 
 ## Capturing System Audio (Music Playback)
 
-By default, the app captures microphone input. To capture actual music playback:
+✅ **System audio capture works out of the box!** 
 
-### Option A: Use BlackHole (5 minutes setup)
+The app uses **ScreenCaptureKit** to capture all system audio:
+- Play music in Spotify, Apple Music, YouTube, or any app
+- The visualizer responds to ALL audio output from your Mac
+- No virtual audio drivers needed!
+- Works immediately after granting screen recording permission
+
+### If You Prefer Not to Grant Screen Recording Permission
+
+The app will automatically fall back to microphone input:
+- Play music out loud near your microphone
+- Or optionally install BlackHole for virtual audio routing:
 
 ```bash
-# Install BlackHole virtual audio driver
+# Install BlackHole (optional)
 brew install blackhole-2ch
-
-# Configure audio routing
-# 1. Open "Audio MIDI Setup" app (in Applications/Utilities)
-# 2. Click the + button → "Create Multi-Output Device"
-# 3. Check BOTH your speakers AND BlackHole 2ch
-# 4. Right-click Multi-Output → "Use This Device For Sound Output"
-# 5. In System Preferences → Sound → Input, select "BlackHole 2ch"
-# 6. Restart Y Music Spectrogram
+# Then configure Audio MIDI Setup to route system audio
 ```
-
-Now play music in any app - the visualizer will respond to it!
-
-### Option B: Keep Using Microphone
-
-Just play music out loud near your computer's microphone. Works great for testing!
 
 ## Controls
 
@@ -108,8 +109,10 @@ killall YMusicSpectrogram
 
 ### Bars aren't moving
 1. Make sure you clicked "Start Capture" in the menu
-2. Verify microphone permission in System Preferences → Security & Privacy → Privacy → Microphone
-3. Make some noise or play audio!
+2. Verify Screen Recording permission in System Settings → Privacy & Security → Screen Recording
+3. Quit and restart the app after granting permission
+4. Play some audio - music, video, system sounds - anything!
+5. If still not working, check Console.app for error messages
 
 ### High CPU usage
 ```bash

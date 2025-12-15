@@ -9,9 +9,10 @@ A macOS menu bar application that displays real-time audio spectrum visualizatio
 
 - 🎵 **Real-time Audio Visualization**: Live spectrum analysis displayed in your menu bar
 - 🎨 **Beautiful Animations**: Smooth, color-coded frequency bars with minimal performance impact
-- 🔊 **Microphone Input**: Captures audio from your microphone (MVP implementation)
+- 🔊 **System Audio Capture**: Uses ScreenCaptureKit to capture all system audio output
 - ⚡ **High Performance**: Uses Apple's Accelerate framework for efficient FFT processing
 - 🎯 **Menu Bar Integration**: Lives in your menu bar, keeps your dock clean
+- 🔄 **Smart Fallback**: Automatically falls back to microphone input if screen recording permission is not available
 
 ## Architecture
 
@@ -19,10 +20,11 @@ The application consists of several key components:
 
 ### Core Components
 
-1. **AudioCaptureManager**: Handles audio input capture from the microphone
-   - Manages AVAudioEngine and audio permissions
+1. **AudioCaptureManager**: Handles system audio capture using ScreenCaptureKit
+   - Uses ScreenCaptureKit API for native system audio capture
+   - Requests screen recording permission automatically
+   - Falls back to microphone input if ScreenCaptureKit is unavailable
    - Processes audio buffers in real-time
-   - Includes notes about system audio capture options
 
 2. **SpectrumAnalyzer**: Performs FFT analysis using the Accelerate framework
    - Uses vDSP for efficient Fast Fourier Transform
@@ -70,49 +72,57 @@ swift build -c release
 
 ## System Audio Capture
 
-⚠️ **Important Note**: This MVP version captures audio from the **microphone** input.
+✅ **Native System Audio**: This application uses **ScreenCaptureKit** to capture all system audio output directly!
 
-To capture actual system audio (music playback), you have several options:
+### How It Works
 
-### Option 1: BlackHole Virtual Audio Driver (Recommended)
+1. **First Launch**: The app will request Screen Recording permission
+2. **Grant Permission**: Go to System Settings > Privacy & Security > Screen Recording
+3. **Enable the app**: Check the box next to Y Music Spectrogram
+4. **Restart**: Quit and relaunch the app for permissions to take effect
 
-1. Install [BlackHole](https://github.com/ExistentialAudio/BlackHole):
+### What Gets Captured
+
+- All system audio output (music, videos, games, etc.)
+- No need for virtual audio drivers like BlackHole
+- Works with any application playing audio
+- Native macOS 13+ integration
+
+### Fallback Mode
+
+If screen recording permission is denied or unavailable:
+- The app automatically falls back to microphone input
+- You can still visualize audio by playing music near your microphone
+- Or install [BlackHole](https://github.com/ExistentialAudio/BlackHole) for virtual audio routing
+
+### Alternative: BlackHole (Optional)
+
+If you prefer not to grant screen recording permission:
+
+1. Install BlackHole:
    ```bash
    brew install blackhole-2ch
    ```
 
-2. Configure Audio MIDI Setup:
-   - Open "Audio MIDI Setup" app
-   - Create a Multi-Output Device
-   - Select both your speakers and BlackHole
-   - Set BlackHole as your input device in the app
-
-### Option 2: ScreenCaptureKit (macOS 13+)
-
-- Requires additional implementation using `SCShareableContent` and `SCStreamConfiguration`
-- Needs Screen Recording permission
-- Can capture audio from specific apps or system-wide
-
-### Option 3: Loopback (Commercial)
-
-- Professional solution from Rogue Amoeba
-- Provides advanced audio routing capabilities
+2. Configure Audio MIDI Setup to route system audio through BlackHole
+3. The app will use microphone input to capture audio from BlackHole
 
 ## Usage
 
 1. Launch the application
-2. Grant microphone permission when prompted
+2. Grant Screen Recording permission when prompted (for system audio)
 3. The spectrum visualizer appears in your menu bar
 4. Right-click the menu bar item to:
    - Start/Stop audio capture
    - Quit the application
+5. Play any audio on your Mac to see the visualization!
 
 ## Technical Details
 
 ### FFT Configuration
 
 - **FFT Size**: 2048 samples
-- **Sample Rate**: 44.1 kHz
+- **Sample Rate**: 48 kHz (ScreenCaptureKit) / 44.1 kHz (microphone fallback)
 - **Buffer Size**: 4096 frames
 - **Frequency Bands**: 32 (logarithmically distributed)
 - **Window Function**: Hann window for spectral leakage reduction
