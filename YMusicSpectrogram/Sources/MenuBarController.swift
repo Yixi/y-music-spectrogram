@@ -14,6 +14,7 @@ class MenuBarController: NSObject {
     private let visualizerView: SpectrumVisualizerView
     private var hostingView: NSHostingView<SpectrumVisualizerView>?
     private var statusBarButton: NSStatusBarButton?
+    private var settingsWindow: NSWindow?
     
     override init() {
         // Initialize spectrum analyzer
@@ -55,6 +56,12 @@ class MenuBarController: NSObject {
         // Add menu
         let menu = NSMenu()
         
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         let startItem = NSMenuItem(title: "Start Capture", action: #selector(startCapture), keyEquivalent: "")
         startItem.target = self
         menu.addItem(startItem)
@@ -78,6 +85,47 @@ class MenuBarController: NSObject {
     
     @objc func stopCapture() {
         audioCaptureManager.stopCapture()
+    }
+    
+    @objc func openSettings() {
+        // If settings window already exists, just bring it to front
+        if let window = settingsWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        // Create settings view
+        let settingsView = SettingsView(spectrumAnalyzer: spectrumAnalyzer)
+        
+        // Create window with hosting view
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 450),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        
+        window.title = "Spectrum Settings"
+        window.contentView = NSHostingView(rootView: settingsView)
+        window.center()
+        window.isReleasedWhenClosed = false
+        
+        // Store reference to window
+        settingsWindow = window
+        
+        // Handle window close to release reference
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.settingsWindow = nil
+        }
+        
+        // Show window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
     
     @objc func quit() {

@@ -28,8 +28,8 @@ class SpectrumAnalyzer: ObservableObject {
     // Windowing function
     private var window: [Float]
     
-    // Number of frequency bands to display
-    private let numberOfBands = 32
+    // Number of frequency bands to display (now configurable)
+    private var numberOfBands = 32
     
     // Smoothing parameters - separate for attack and release
     private let attackFactor: Float = 0.7   // Fast attack (higher = faster response to increases)
@@ -53,6 +53,10 @@ class SpectrumAnalyzer: ObservableObject {
     private var sampleRate: Float = 48000.0
     
     init() {
+        // Load band count from settings
+        self.numberOfBands = SettingsManager.shared.bandCount
+        self.spectrumBands = Array(repeating: 0, count: numberOfBands)
+        
         self.realParts = [Float](repeating: 0, count: fftSize)
         self.imaginaryParts = [Float](repeating: 0, count: fftSize)
         self.magnitudes = [Float](repeating: 0, count: fftSize / 2)
@@ -69,6 +73,13 @@ class SpectrumAnalyzer: ObservableObject {
         vDSP_blkman_window(&window, vDSP_Length(fftSize), 0)
         
         // Pre-compute frequency band boundaries
+        computeBandBoundaries()
+    }
+    
+    // Update band count dynamically
+    func updateBandCount(_ count: Int) {
+        numberOfBands = count
+        spectrumBands = Array(repeating: 0, count: numberOfBands)
         computeBandBoundaries()
     }
     
