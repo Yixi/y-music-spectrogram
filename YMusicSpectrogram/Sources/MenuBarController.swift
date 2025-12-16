@@ -8,12 +8,20 @@
 import Cocoa
 import SwiftUI
 
+/// Custom NSHostingView subclass that allows mouse events to pass through
+class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Return nil to let clicks pass through to the parent button
+        return nil
+    }
+}
+
 class MenuBarController: NSObject {
     private let audioCaptureManager: AudioCaptureManager
     private let spectrumAnalyzer: SpectrumAnalyzer
     private let visualizerView: SpectrumVisualizerView
-    private var hostingView: NSHostingView<SpectrumVisualizerView>?
-    private var statusBarButton: NSStatusBarButton?
+    private var hostingView: NSView?
+    private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var windowCloseObserver: NSObjectProtocol?
     
@@ -35,26 +43,27 @@ class MenuBarController: NSObject {
         }
     }
     
-    func setupStatusBarButton(_ button: NSStatusBarButton) {
-        self.statusBarButton = button
+    func setupStatusItem(_ statusItem: NSStatusItem) {
+        self.statusItem = statusItem
         
-        // Create hosting view for SwiftUI content
-        hostingView = NSHostingView(rootView: visualizerView)
-        hostingView?.frame = NSRect(x: 0, y: 0, width: 150, height: 22)
+        guard let button = statusItem.button else { return }
+        
+        // Create hosting view for SwiftUI content using click-through subclass
+        let clickThroughView = ClickThroughHostingView(rootView: visualizerView)
+        clickThroughView.frame = NSRect(x: 0, y: 0, width: 150, height: 22)
+        hostingView = clickThroughView
         
         // Add hosting view to button
-        if let hostingView = hostingView {
-            button.addSubview(hostingView)
-            hostingView.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                hostingView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-                hostingView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-                hostingView.topAnchor.constraint(equalTo: button.topAnchor),
-                hostingView.bottomAnchor.constraint(equalTo: button.bottomAnchor)
-            ])
-        }
+        button.addSubview(clickThroughView)
+        clickThroughView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            clickThroughView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            clickThroughView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            clickThroughView.topAnchor.constraint(equalTo: button.topAnchor),
+            clickThroughView.bottomAnchor.constraint(equalTo: button.bottomAnchor)
+        ])
         
-        // Add menu
+        // Create and set menu on the status item (not on button)
         let menu = NSMenu()
         
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
@@ -77,7 +86,8 @@ class MenuBarController: NSObject {
         quitItem.target = self
         menu.addItem(quitItem)
         
-        button.menu = menu
+        // Set menu on status item - this makes it appear on any click
+        statusItem.menu = menu
     }
     
     @objc func startCapture() {
