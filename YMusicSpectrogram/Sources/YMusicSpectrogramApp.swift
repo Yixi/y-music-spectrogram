@@ -34,10 +34,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create status bar item
         statusItem = NSStatusBar.system.statusItem(withLength: 150)
         
-        if let button = statusItem?.button {
-            // The button will be replaced by custom view
-            button.title = ""
-            menuBarController?.setupStatusBarButton(button)
+        if let statusItem = statusItem {
+            statusItem.button?.title = ""
+            menuBarController?.setupStatusItem(statusItem)
         }
     }
 }

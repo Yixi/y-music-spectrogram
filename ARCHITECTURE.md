@@ -231,6 +231,58 @@ smoothed = α * previous + (1 - α) * current
 - 基于强度应用颜色编码
 - 适应菜单栏约束
 
+### 7. SettingsManager
+
+**文件**: `SettingsManager.swift`
+
+**职责**:
+- 管理用户偏好设置
+- 存储和加载设置 (UserDefaults)
+- 提供颜色计算方法
+- 发布设置变更通知
+
+**管理的设置**:
+- 频带数量 (8-64)
+- 颜色方案 (Rainbow, Green to Red, Blue to Red, Monochrome, Custom)
+- 自定义颜色参数 (色调、饱和度、亮度)
+
+**设计模式**:
+- 单例模式 (`shared` 实例)
+- ObservableObject 用于响应式更新
+- @Published 属性自动保存到 UserDefaults
+
+**颜色方案**:
+```swift
+enum ColorScheme {
+    case rainbow        // 全彩虹光谱
+    case greenToRed     // 经典频率可视化
+    case blueToRed      // 冷暖色调过渡
+    case monochrome     // 单色渐变
+    case custom         // 用户自定义
+}
+```
+
+### 8. SettingsView
+
+**文件**: `SettingsView.swift`
+
+**职责**:
+- 渲染设置窗口 UI
+- 处理用户交互
+- 更新 SettingsManager 和 SpectrumAnalyzer
+
+**UI 组件**:
+- 频带数量滑块 (8-64, 步长 4)
+- 颜色方案分段选择器
+- 自定义颜色控件 (色调/饱和度/亮度滑块)
+- 信息提示
+
+**设计决策**:
+- SwiftUI 声明式 UI
+- 实时预览更改
+- 条件显示自定义颜色控件
+- 固定窗口大小 (500x450)
+
 **UI 结构**:
 ```swift
 GeometryReader
@@ -436,6 +488,20 @@ GeometryReader
 
 ## 未来架构改进
 
+### 已实现的功能
+
+1. **设置系统** ✅:
+   - 用户偏好存储 (UserDefaults)
+   - 可自定义颜色方案 (5种预设 + 自定义)
+   - 可配置频带数量 (8-64)
+   - 设置窗口界面
+   - 实时预览更改
+
+2. **右键菜单** ✅:
+   - 设置窗口访问
+   - 开始/停止捕获
+   - 退出应用
+
 ### 计划的增强
 
 1. **ScreenCaptureKit 支持**:
@@ -443,10 +509,10 @@ GeometryReader
    - 实现特定应用捕获
    - 自动回退到麦克风
 
-2. **设置系统**:
-   - 用户偏好存储
-   - 可自定义颜色/频带
+2. **更多设置选项**:
    - 音频设备选择
+   - FFT 大小配置
+   - 平滑参数调整
 
 3. **多种可视化器**:
    - 可视化器样式的插件架构
@@ -468,7 +534,9 @@ YMusicSpectrogram/
 │   ├── MenuBarController.swift       (协调)
 │   ├── AudioCaptureManager.swift     (输入)
 │   ├── SpectrumAnalyzer.swift        (处理)
-│   └── SpectrumVisualizerView.swift  (UI)
+│   ├── SpectrumVisualizerView.swift  (UI)
+│   ├── SettingsManager.swift         (设置管理) ✨
+│   └── SettingsView.swift            (设置界面) ✨
 └── Resources/
     └── Info.plist                     (配置)
 ```

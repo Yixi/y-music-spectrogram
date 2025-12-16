@@ -39,6 +39,7 @@ struct SpectrumBar: View {
     
     private let minHeight: CGFloat = 1.5
     private let cornerRadius: CGFloat = 1.0
+    private let settings = SettingsManager.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -68,22 +69,13 @@ struct SpectrumBar: View {
     }
     
     private var baseColor: Color {
-        // Color varies by frequency band position (low = warmer, high = cooler)
-        let hue = 0.35 - (Double(index) / Double(totalBars)) * 0.35  // Green to Red
-        return Color(hue: hue, saturation: 0.8, brightness: 0.9)
+        // Use color from settings manager
+        return settings.getBarColor(index: index, totalBars: totalBars, magnitude: magnitude)
     }
     
     private var peakColor: Color {
-        // Brighter color for peaks based on magnitude
-        if magnitude > 0.8 {
-            return Color(red: 1.0, green: 0.2, blue: 0.2)  // Bright red for high peaks
-        } else if magnitude > 0.5 {
-            return Color(red: 1.0, green: 0.6, blue: 0.1)  // Orange for medium-high
-        } else if magnitude > 0.3 {
-            return Color(red: 0.9, green: 0.9, blue: 0.2)  // Yellow for medium
-        } else {
-            return Color(red: 0.3, green: 0.9, blue: 0.4)  // Green for low
-        }
+        // Use peak color from settings manager
+        return settings.getPeakColor(magnitude: magnitude)
     }
 }
 

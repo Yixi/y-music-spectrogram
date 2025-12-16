@@ -12,6 +12,8 @@
 - 🔊 **系统音频捕获**：使用 ScreenCaptureKit 直接捕获所有系统音频输出
 - ⚡ **高性能**：利用 Apple Accelerate 框架进行高效的 FFT 处理
 - 🎯 **菜单栏集成**：驻留在菜单栏中，保持 Dock 栏整洁
+- ⚙️ **可自定义设置**：调整频谱条数量 (8-64) 和颜色方案
+- 🎨 **多种颜色方案**：彩虹、绿到红、蓝到红、单色、自定义
 
 ## 架构设计
 
@@ -38,6 +40,16 @@
    - 创建和配置菜单栏项目
    - 提供开始/停止控制
    - 集成所有组件
+
+5. **SettingsManager**：管理用户偏好设置
+   - 存储和加载设置（使用 UserDefaults）
+   - 支持 5 种颜色方案
+   - 可配置频带数量 (8-64)
+
+6. **SettingsView**：设置窗口界面
+   - SwiftUI 界面，用于自定义频谱
+   - 实时预览更改
+   - 自动保存设置
 
 ## 构建与运行
 
@@ -96,9 +108,14 @@ swift build -c release
 2. 出现提示时授予屏幕录制权限（用于系统音频）
 3. 频谱可视化器将出现在您的菜单栏中
 4. 右键单击菜单栏项目可以：
+   - 打开设置窗口 (或按 ⌘,)
    - 开始/停止音频捕获
    - 退出应用程序
-5. 在 Mac 上播放任何音频即可看到可视化效果！
+5. 在设置窗口中，您可以：
+   - 调整频谱条数量 (8-64)
+   - 选择颜色方案（彩虹、绿到红、蓝到红、单色、自定义）
+   - 自定义颜色（色调、饱和度、亮度）
+6. 在 Mac 上播放任何音频即可看到可视化效果！
 
 ## 技术细节
 
@@ -129,26 +146,30 @@ swift build -c release
 y-music-spectrogram/
 ├── Package.swift
 ├── README.md
+├── ARCHITECTURE.md                          # 架构文档
+├── SETTINGS_GUIDE.md                        # 设置指南
 └── YMusicSpectrogram/
     ├── Sources/
     │   ├── YMusicSpectrogramApp.swift      # 应用入口点
     │   ├── MenuBarController.swift          # 菜单栏集成
     │   ├── AudioCaptureManager.swift        # 音频输入处理
     │   ├── SpectrumAnalyzer.swift          # FFT 处理
-    │   └── SpectrumVisualizerView.swift    # UI 可视化
+    │   ├── SpectrumVisualizerView.swift    # UI 可视化
+    │   ├── SettingsManager.swift           # 设置管理 ✨
+    │   └── SettingsView.swift              # 设置界面 ✨
     └── Resources/
         └── Info.plist                       # 应用配置
 ```
 
 ## 未来增强
 
-- [ ] ScreenCaptureKit 集成用于原生系统音频捕获
-- [ ] 可自定义配色方案
-- [ ] 可调节频带数量
+- [x] ScreenCaptureKit 集成用于原生系统音频捕获
+- [x] 可自定义配色方案（5种方案可选）
+- [x] 可调节频带数量（8-64可调）
 - [ ] 峰值保持指示器
 - [ ] 音频设备选择
 - [ ] 预设可视化样式
-- [ ] 导出设置/偏好
+- [ ] 导出/导入设置
 
 ## 许可证
 

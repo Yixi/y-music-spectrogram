@@ -10,7 +10,7 @@ import Foundation
 
 class SpectrumAnalyzer: ObservableObject {
     // Published property for SwiftUI updates
-    @Published var spectrumBands: [Float] = Array(repeating: 0, count: 32)
+    @Published var spectrumBands: [Float]
     
     // FFT Configuration - larger size for better frequency resolution
     private let fftSize: Int = 4096
@@ -28,8 +28,11 @@ class SpectrumAnalyzer: ObservableObject {
     // Windowing function
     private var window: [Float]
     
-    // Number of frequency bands to display
-    private let numberOfBands = 32
+    // Number of frequency bands to display (now configurable)
+    private var numberOfBands = 32
+
+    // Protect mutable configuration accessed from multiple threads
+    private let configurationLock = NSLock()
     
     // Smoothing parameters - separate for attack and release
     private let attackFactor: Float = 0.7   // Fast attack (higher = faster response to increases)
@@ -53,6 +56,11 @@ class SpectrumAnalyzer: ObservableObject {
     private var sampleRate: Float = 48000.0
     
     init() {
+        // Load band count from settings
+        let initialBandCount = SettingsManager.shared.bandCount
+        self.numberOfBands = initialBandCount
+        self.spectrumBands = Array(repeating: 0, count: initialBandCount)
+        
         self.realParts = [Float](repeating: 0, count: fftSize)
         self.imaginaryParts = [Float](repeating: 0, count: fftSize)
         self.magnitudes = [Float](repeating: 0, count: fftSize / 2)
@@ -72,6 +80,23 @@ class SpectrumAnalyzer: ObservableObject {
         computeBandBoundaries()
     }
     
+    // Update band count dynamically
+    func updateBandCount(_ count: Int) {
+        let clamped = max(1, count)
+
+        // Update internal configuration under lock to avoid races with processSamples
+        configurationLock.lock()
+        numberOfBands = clamped
+        bandBoundaries = computeBandBoundariesSnapshot(numberOfBands: clamped, sampleRate: sampleRate)
+        configurationLock.unlock()
+
+        // Ensure @Published changes happen on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.spectrumBands = Array(repeating: 0, count: clamped)
+        }
+    }
+    
     deinit {
         if let setup = fftSetup {
             vDSP_DFT_DestroySetup(setup)
@@ -79,36 +104,47 @@ class SpectrumAnalyzer: ObservableObject {
     }
     
     private func computeBandBoundaries() {
+        configurationLock.lock()
+        bandBoundaries = computeBandBoundariesSnapshot(numberOfBands: numberOfBands, sampleRate: sampleRate)
+        configurationLock.unlock()
+    }
+
+    private func computeBandBoundariesSnapshot(numberOfBands: Int, sampleRate: Float) -> [(start: Int, end: Int)] {
+        guard numberOfBands > 0 else { return [] }
+
         // Frequency ranges optimized for music visualization
         // Bass: 20-250Hz, Mids: 250-2000Hz, Highs: 2000-20000Hz
         let minFreq: Float = 20.0
         let maxFreq: Float = 20000.0
-        
+
         let nyquist = sampleRate / 2.0
         let binCount = fftSize / 2
         let freqPerBin = nyquist / Float(binCount)
-        
-        bandBoundaries = []
-        
+
+        var boundaries: [(start: Int, end: Int)] = []
+        boundaries.reserveCapacity(numberOfBands)
+
         for i in 0..<numberOfBands {
             // Logarithmic frequency distribution
             let ratio = Float(i) / Float(numberOfBands)
             let nextRatio = Float(i + 1) / Float(numberOfBands)
-            
+
             // Map to frequency using log scale
             let startFreq = minFreq * pow(maxFreq / minFreq, ratio)
             let endFreq = minFreq * pow(maxFreq / minFreq, nextRatio)
-            
+
             // Convert to FFT bin indices
             var startBin = Int(startFreq / freqPerBin)
             var endBin = Int(endFreq / freqPerBin)
-            
+
             // Clamp to valid range
             startBin = max(1, min(startBin, binCount - 1))
             endBin = max(startBin + 1, min(endBin, binCount))
-            
-            bandBoundaries.append((start: startBin, end: endBin))
+
+            boundaries.append((start: startBin, end: endBin))
         }
+
+        return boundaries
     }
     
     func processSamples(_ samples: [Float]) {
@@ -138,7 +174,7 @@ class SpectrumAnalyzer: ObservableObject {
             // Decay all bands when silent
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                for i in 0..<self.numberOfBands {
+                for i in self.spectrumBands.indices {
                     self.spectrumBands[i] *= 0.9
                 }
             }
@@ -193,13 +229,26 @@ class SpectrumAnalyzer: ObservableObject {
         var scale: Float = 2.0 / Float(fftSize)
         vDSP_vsmul(sqrtMagnitudes, 1, &scale, &normalizedMags, 1, vDSP_Length(halfSize))
         
-        // Group frequencies into bands using pre-computed boundaries
-        let newBands = groupIntoFrequencyBands(normalizedMags)
+        // Snapshot band config to avoid races if user changes band count mid-processing
+        configurationLock.lock()
+        let bandCountSnapshot = numberOfBands
+        let boundariesSnapshot = bandBoundaries
+        configurationLock.unlock()
+
+        // Group frequencies into bands using snapshot boundaries
+        let newBands = groupIntoFrequencyBands(
+            normalizedMags,
+            numberOfBands: bandCountSnapshot,
+            bandBoundaries: boundariesSnapshot
+        )
         
         // Apply smoothing with separate attack/release for natural response
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            for i in 0..<self.numberOfBands {
+            let count = min(self.spectrumBands.count, newBands.count)
+            guard count > 0 else { return }
+
+            for i in 0..<count {
                 let current = self.spectrumBands[i]
                 let target = newBands[i]
                 
@@ -211,13 +260,27 @@ class SpectrumAnalyzer: ObservableObject {
                     self.spectrumBands[i] = current + (target - current) * (1.0 - self.releaseFactor)
                 }
             }
+
+            // If bands were reduced, clear any remaining values
+            if self.spectrumBands.count > count {
+                for i in count..<self.spectrumBands.count {
+                    self.spectrumBands[i] = 0
+                }
+            }
         }
     }
     
-    private func groupIntoFrequencyBands(_ magnitudes: [Float]) -> [Float] {
-        var bands = [Float](repeating: 0, count: numberOfBands)
-        
-        for i in 0..<numberOfBands {
+    private func groupIntoFrequencyBands(
+        _ magnitudes: [Float],
+        numberOfBands: Int,
+        bandBoundaries: [(start: Int, end: Int)]
+    ) -> [Float] {
+        guard numberOfBands > 0 else { return [] }
+
+        let count = min(numberOfBands, bandBoundaries.count)
+        var bands = [Float](repeating: 0, count: count)
+
+        for i in 0..<count {
             let boundary = bandBoundaries[i]
             let startIdx = boundary.start
             let endIdx = min(boundary.end, magnitudes.count)
