@@ -12,8 +12,8 @@ class SpectrumAnalyzer: ObservableObject {
     // Published property for SwiftUI updates
     @Published var spectrumBands: [Float] = Array(repeating: 0, count: 32)
     
-    // FFT Configuration
-    private let fftSize: Int = 2048
+    // FFT Configuration - larger size for better frequency resolution
+    private let fftSize: Int = 4096
     private var fftSetup: vDSP_DFT_Setup?
     
     // Buffers for FFT processing
@@ -23,7 +23,7 @@ class SpectrumAnalyzer: ObservableObject {
     
     // Input buffer to accumulate samples
     private var inputBuffer: [Float] = []
-    private let maxBufferSize: Int = 4096 * 2 // Prevent buffer from growing too large
+    private let maxBufferSize: Int = 8192
     
     // Windowing function
     private var window: [Float]
@@ -31,8 +31,26 @@ class SpectrumAnalyzer: ObservableObject {
     // Number of frequency bands to display
     private let numberOfBands = 32
     
-    // Smoothing factor for animations
-    private let smoothingFactor: Float = 0.7
+    // Smoothing parameters - separate for attack and release
+    private let attackFactor: Float = 0.7   // Fast attack (higher = faster response to increases)
+    private let releaseFactor: Float = 0.85 // Slower release (higher = slower decay)
+    
+    // dB range for normalization - tighter range for more visible dynamics
+    private let dbFloor: Float = -50
+    private let dbCeiling: Float = -10
+    
+    // Reference level for normalization (adjusts sensitivity)
+    private let referenceLevel: Float = 1e-6
+    
+    // Peak tracking for auto-gain
+    private var peakLevel: Float = 0.001
+    private let peakDecay: Float = 0.9995  // Very slow decay for peak tracking
+    
+    // Pre-computed frequency band boundaries
+    private var bandBoundaries: [(start: Int, end: Int)] = []
+    
+    // Sample rate (will be updated when processing)
+    private var sampleRate: Float = 48000.0
     
     init() {
         self.realParts = [Float](repeating: 0, count: fftSize)
@@ -47,13 +65,49 @@ class SpectrumAnalyzer: ObservableObject {
             vDSP_DFT_Direction.FORWARD
         )
         
-        // Generate Hann window
-        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
+        // Generate Blackman-Harris window (better sidelobe suppression than Hann)
+        vDSP_blkman_window(&window, vDSP_Length(fftSize), 0)
+        
+        // Pre-compute frequency band boundaries
+        computeBandBoundaries()
     }
     
     deinit {
         if let setup = fftSetup {
             vDSP_DFT_DestroySetup(setup)
+        }
+    }
+    
+    private func computeBandBoundaries() {
+        // Frequency ranges optimized for music visualization
+        // Bass: 20-250Hz, Mids: 250-2000Hz, Highs: 2000-20000Hz
+        let minFreq: Float = 20.0
+        let maxFreq: Float = 20000.0
+        
+        let nyquist = sampleRate / 2.0
+        let binCount = fftSize / 2
+        let freqPerBin = nyquist / Float(binCount)
+        
+        bandBoundaries = []
+        
+        for i in 0..<numberOfBands {
+            // Logarithmic frequency distribution
+            let ratio = Float(i) / Float(numberOfBands)
+            let nextRatio = Float(i + 1) / Float(numberOfBands)
+            
+            // Map to frequency using log scale
+            let startFreq = minFreq * pow(maxFreq / minFreq, ratio)
+            let endFreq = minFreq * pow(maxFreq / minFreq, nextRatio)
+            
+            // Convert to FFT bin indices
+            var startBin = Int(startFreq / freqPerBin)
+            var endBin = Int(endFreq / freqPerBin)
+            
+            // Clamp to valid range
+            startBin = max(1, min(startBin, binCount - 1))
+            endBin = max(startBin + 1, min(endBin, binCount))
+            
+            bandBoundaries.append((start: startBin, end: endBin))
         }
     }
     
@@ -68,16 +122,31 @@ class SpectrumAnalyzer: ObservableObject {
         
         // Check if we have enough samples for FFT
         guard inputBuffer.count >= fftSize else {
-            // Debug log for insufficient samples (throttled)
-            if Int.random(in: 0...50) == 0 {
-                print("⚠️ Buffering samples: \(inputBuffer.count) / \(fftSize)")
-            }
             return
         }
         
         // Take the latest fftSize samples for analysis
         let startIndex = inputBuffer.count - fftSize
         var inputSamples = Array(inputBuffer[startIndex..<inputBuffer.count])
+        
+        // Calculate RMS of input for auto-gain
+        var rms: Float = 0
+        vDSP_rmsqv(inputSamples, 1, &rms, vDSP_Length(fftSize))
+        
+        // Skip if input is essentially silent
+        if rms < 1e-8 {
+            // Decay all bands when silent
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                for i in 0..<self.numberOfBands {
+                    self.spectrumBands[i] *= 0.9
+                }
+            }
+            return
+        }
+        
+        // Update peak level for auto-gain (with slow decay)
+        peakLevel = max(peakLevel * peakDecay, rms)
         
         // Apply window function to reduce spectral leakage
         vDSP_vmul(inputSamples, 1, window, 1, &inputSamples, 1, vDSP_Length(fftSize))
@@ -114,62 +183,87 @@ class SpectrumAnalyzer: ObservableObject {
             }
         }
         
-        // Convert to dB scale and normalize
-        let normalizedMagnitudes = magnitudes.map { magnitude -> Float in
-            // vDSP_zvmags returns squared magnitudes, so use 10*log10
-            let db = 10 * log10(max(magnitude, 1e-10))
-            // Normalize to 0-1 range (assuming -80 to 0 dB range)
-            // Adjusted range 2 -100 to 0 dB to capture quieter sounds
-            return max(0, min(1, (db + 100) / 100))
-        }
+        // Take square root to get actual magnitudes (vDSP_zvmags returns squared values)
+        var sqrtMagnitudes = [Float](repeating: 0, count: halfSize)
+        var count = Int32(halfSize)
+        vvsqrtf(&sqrtMagnitudes, magnitudes, &count)
         
-        // Debug: Print magnitude stats
-        if Int.random(in: 0...500) == 0 {
-            let maxMag = magnitudes.max() ?? 0
-            let maxNorm = normalizedMagnitudes.max() ?? 0
-            let maxDB = 10 * log10(max(maxMag, 1e-10))
-            // print("📊 FFT Stats: MaxMag=\(String(format: "%.6f", maxMag)), MaxDB=\(String(format: "%.2f", maxDB)), MaxNorm=\(String(format: "%.4f", maxNorm))")
-        }
+        // Normalize by FFT size
+        var normalizedMags = [Float](repeating: 0, count: halfSize)
+        var scale: Float = 2.0 / Float(fftSize)
+        vDSP_vsmul(sqrtMagnitudes, 1, &scale, &normalizedMags, 1, vDSP_Length(halfSize))
         
-        // Group frequencies into bands (logarithmic scale for better visualization)
-        let newBands = groupIntoFrequencyBands(normalizedMagnitudes)
+        // Group frequencies into bands using pre-computed boundaries
+        let newBands = groupIntoFrequencyBands(normalizedMags)
         
-        // Apply smoothing for better visual effect
+        // Apply smoothing with separate attack/release for natural response
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             for i in 0..<self.numberOfBands {
-                self.spectrumBands[i] = self.smoothingFactor * self.spectrumBands[i] + (1 - self.smoothingFactor) * newBands[i]
-            }
-            
-            // Debug: Print first few bands to verify UI data
-            if Int.random(in: 0...100) == 0 {
-                let bandsPreview = self.spectrumBands.prefix(5).map { String(format: "%.2f", $0) }.joined(separator: ", ")
-                print("📊 UI Bands: [\(bandsPreview)]")
+                let current = self.spectrumBands[i]
+                let target = newBands[i]
+                
+                if target > current {
+                    // Attack: fast response to increasing levels
+                    self.spectrumBands[i] = current + (target - current) * self.attackFactor
+                } else {
+                    // Release: slower decay for smoother visuals
+                    self.spectrumBands[i] = current + (target - current) * (1.0 - self.releaseFactor)
+                }
             }
         }
     }
     
     private func groupIntoFrequencyBands(_ magnitudes: [Float]) -> [Float] {
         var bands = [Float](repeating: 0, count: numberOfBands)
-        let magnitudeCount = magnitudes.count
         
-        // Use logarithmic grouping for frequency bands
-        // This gives more resolution to lower frequencies (bass/mids)
         for i in 0..<numberOfBands {
-            let bandPosition = Float(i) / Float(numberOfBands)
-            let nextBandPosition = Float(i + 1) / Float(numberOfBands)
-            // Logarithmic scale: use exp(log(max) * position) for proper distribution
-            let startIndex = Int(exp(log(Float(magnitudeCount)) * bandPosition))
-            let endIndex = Int(exp(log(Float(magnitudeCount)) * nextBandPosition))
+            let boundary = bandBoundaries[i]
+            let startIdx = boundary.start
+            let endIdx = min(boundary.end, magnitudes.count)
             
-            let clampedStart = min(startIndex, magnitudeCount - 1)
-            let clampedEnd = min(endIndex, magnitudeCount)
+            guard startIdx < endIdx else { continue }
             
-            if clampedStart < clampedEnd {
-                let bandSlice = magnitudes[clampedStart..<clampedEnd]
-                // Use average of the band
-                bands[i] = bandSlice.reduce(0, +) / Float(bandSlice.count)
+            // Calculate average magnitude for this band
+            var sum: Float = 0
+            var maxVal: Float = 0
+            
+            for j in startIdx..<endIdx {
+                let mag = magnitudes[j]
+                sum += mag
+                maxVal = max(maxVal, mag)
             }
+            
+            let count = Float(endIdx - startIdx)
+            // Use weighted combination of average and peak for better visualization
+            let avgMag = sum / count
+            let combinedMag = avgMag * 0.4 + maxVal * 0.6
+            
+            // Convert to dB scale with auto-gain normalization
+            let autoGain = 1.0 / max(peakLevel * 10.0, 0.001)
+            let scaledMag = combinedMag * autoGain
+            
+            // Convert to dB
+            let db = 20.0 * log10(max(scaledMag, referenceLevel))
+            
+            // Normalize to 0-1 range
+            let dbRange = dbCeiling - dbFloor
+            var normalized = (db - dbFloor) / dbRange
+            
+            // Apply soft compression for better visual distribution
+            normalized = pow(max(0, min(1, normalized)), 0.7)
+            
+            // Apply frequency-dependent boost (bass needs more boost typically)
+            let freqBoost: Float
+            if i < 4 {
+                freqBoost = 1.3  // Bass boost
+            } else if i < 12 {
+                freqBoost = 1.1  // Low-mid boost
+            } else {
+                freqBoost = 1.0  // Flat for highs
+            }
+            
+            bands[i] = min(1.0, normalized * freqBoost)
         }
         
         return bands
