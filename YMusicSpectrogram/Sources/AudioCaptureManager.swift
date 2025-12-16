@@ -85,19 +85,26 @@ class AudioCaptureManager: NSObject {
             onScreenWindowsOnly: true
         )
         
+        print("🖥️ Available displays: \(availableContent.displays.count)")
+        for (index, display) in availableContent.displays.enumerated() {
+            print("  Display \(index): \(display.width)x\(display.height) ID:\(display.displayID)")
+        }
+        
         // Configure stream to capture system audio
         let streamConfig = SCStreamConfiguration()
         streamConfig.capturesAudio = true
         streamConfig.sampleRate = Int(sampleRate)
         streamConfig.channelCount = 2
+        streamConfig.excludesCurrentProcessAudio = false // Ensure we don't exclude ourselves (though we don't play audio)
         
         // Exclude all video to only capture audio
-        streamConfig.width = 1
-        streamConfig.height = 1
+        streamConfig.width = 100 // Minimum size might be needed for some displays
+        streamConfig.height = 100
         streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: 1)
         streamConfig.queueDepth = 5
         
         // Create a content filter - we'll capture the main display's audio
+        // Using excludingWindows: [] ensures we capture everything on that display
         let filter: SCContentFilter
         if let display = availableContent.displays.first {
             filter = SCContentFilter(display: display, excludingWindows: [])
@@ -128,11 +135,15 @@ class AudioCaptureManager: NSObject {
     
     private func requestScreenRecordingPermission() async -> Bool {
         // Check if we already have permission
-        if CGPreflightScreenCaptureAccess() {
+        let canRecord = CGPreflightScreenCaptureAccess()
+        print("🔍 Preflight screen capture access: \(canRecord)")
+        
+        if canRecord {
             return true
         }
         
         // Request permission
+        print("⚠️ Requesting screen capture access...")
         return CGRequestScreenCaptureAccess()
     }
     
@@ -190,8 +201,19 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
         // Verify audio format is Float32 PCM (Linear PCM)
         let formatID = streamDescription.mFormatID
         let bitsPerChannel = streamDescription.mBitsPerChannel
-        guard formatID == kAudioFormatLinearPCM && bitsPerChannel == 32 else {
-            print("⚠️ Unexpected audio format: formatID=\(formatID), bitsPerChannel=\(bitsPerChannel)")
+        let flags = streamDescription.mFormatFlags
+        let isFloat = (flags & kAudioFormatFlagIsFloat) != 0
+        let isSignedInteger = (flags & kAudioFormatFlagIsSignedInteger) != 0
+        
+        // Debug print for audio format (throttled to avoid spam)
+        if Int.random(in: 0...200) == 0 {
+             print("🔊 Audio Format: \(formatID), Bits: \(bitsPerChannel), Channels: \(streamDescription.mChannelsPerFrame), Flags: \(flags), IsFloat: \(isFloat)")
+        }
+        
+        guard formatID == kAudioFormatLinearPCM && bitsPerChannel == 32 && isFloat else {
+            if Int.random(in: 0...200) == 0 {
+                print("⚠️ Unexpected audio format: formatID=\(formatID), bits=\(bitsPerChannel), isFloat=\(isFloat)")
+            }
             return
         }
         
@@ -207,11 +229,26 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
                 for i in 0..<frameCount {
                     samples[i] = floatPointer[i]
                 }
-            } else if channelCount == 2 {
-                // Stereo audio - mix to mono
+            } else if channelCount >= 2 {
+                // Stereo or Multi-channel audio - mix first two channels to mono
                 for i in 0..<frameCount {
-                    samples[i] = (floatPointer[i * 2] + floatPointer[i * 2 + 1]) / 2.0
+                    let left = floatPointer[i * channelCount]
+                    let right = floatPointer[i * channelCount + 1]
+                    samples[i] = (left + right) / 2.0
                 }
+            }
+        }
+        
+        // Debug: Print first few samples to verify data
+        if Int.random(in: 0...500) == 0 {
+            let maxSamples = min(5, samples.count)
+            let samplePreview = samples.prefix(maxSamples).map { String(format: "%.4f", $0) }.joined(separator: ", ")
+            // print("📊 Samples: [\(samplePreview)]")
+            
+            // Check for silence
+            let maxVal = samples.reduce(0) { max($0, abs($1)) }
+            if maxVal < 0.0001 {
+                print("⚠️ Silence detected (max amplitude: \(maxVal))")
             }
         }
         

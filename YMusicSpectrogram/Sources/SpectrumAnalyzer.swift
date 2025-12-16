@@ -21,6 +21,10 @@ class SpectrumAnalyzer: ObservableObject {
     private var imaginaryParts: [Float]
     private var magnitudes: [Float]
     
+    // Input buffer to accumulate samples
+    private var inputBuffer: [Float] = []
+    private let maxBufferSize: Int = 4096 * 2 // Prevent buffer from growing too large
+    
     // Windowing function
     private var window: [Float]
     
@@ -54,10 +58,26 @@ class SpectrumAnalyzer: ObservableObject {
     }
     
     func processSamples(_ samples: [Float]) {
-        guard samples.count >= fftSize else { return }
+        // Append new samples to buffer
+        inputBuffer.append(contentsOf: samples)
         
-        // Take first fftSize samples
-        var inputSamples = Array(samples.prefix(fftSize))
+        // If buffer is too large, trim from the beginning to keep latest samples
+        if inputBuffer.count > maxBufferSize {
+            inputBuffer.removeFirst(inputBuffer.count - maxBufferSize)
+        }
+        
+        // Check if we have enough samples for FFT
+        guard inputBuffer.count >= fftSize else {
+            // Debug log for insufficient samples (throttled)
+            if Int.random(in: 0...50) == 0 {
+                print("⚠️ Buffering samples: \(inputBuffer.count) / \(fftSize)")
+            }
+            return
+        }
+        
+        // Take the latest fftSize samples for analysis
+        let startIndex = inputBuffer.count - fftSize
+        var inputSamples = Array(inputBuffer[startIndex..<inputBuffer.count])
         
         // Apply window function to reduce spectral leakage
         vDSP_vmul(inputSamples, 1, window, 1, &inputSamples, 1, vDSP_Length(fftSize))
@@ -96,9 +116,19 @@ class SpectrumAnalyzer: ObservableObject {
         
         // Convert to dB scale and normalize
         let normalizedMagnitudes = magnitudes.map { magnitude -> Float in
+            // vDSP_zvmags returns squared magnitudes, so use 10*log10
             let db = 10 * log10(max(magnitude, 1e-10))
             // Normalize to 0-1 range (assuming -80 to 0 dB range)
-            return max(0, min(1, (db + 80) / 80))
+            // Adjusted range 2 -100 to 0 dB to capture quieter sounds
+            return max(0, min(1, (db + 100) / 100))
+        }
+        
+        // Debug: Print magnitude stats
+        if Int.random(in: 0...500) == 0 {
+            let maxMag = magnitudes.max() ?? 0
+            let maxNorm = normalizedMagnitudes.max() ?? 0
+            let maxDB = 10 * log10(max(maxMag, 1e-10))
+            // print("📊 FFT Stats: MaxMag=\(String(format: "%.6f", maxMag)), MaxDB=\(String(format: "%.2f", maxDB)), MaxNorm=\(String(format: "%.4f", maxNorm))")
         }
         
         // Group frequencies into bands (logarithmic scale for better visualization)
@@ -109,6 +139,12 @@ class SpectrumAnalyzer: ObservableObject {
             guard let self = self else { return }
             for i in 0..<self.numberOfBands {
                 self.spectrumBands[i] = self.smoothingFactor * self.spectrumBands[i] + (1 - self.smoothingFactor) * newBands[i]
+            }
+            
+            // Debug: Print first few bands to verify UI data
+            if Int.random(in: 0...100) == 0 {
+                let bandsPreview = self.spectrumBands.prefix(5).map { String(format: "%.2f", $0) }.joined(separator: ", ")
+                print("📊 UI Bands: [\(bandsPreview)]")
             }
         }
     }
