@@ -15,6 +15,7 @@ class MenuBarController: NSObject {
     private var hostingView: NSHostingView<SpectrumVisualizerView>?
     private var statusBarButton: NSStatusBarButton?
     private var settingsWindow: NSWindow?
+    private var windowCloseObserver: NSObjectProtocol?
     
     override init() {
         // Initialize spectrum analyzer
@@ -115,12 +116,16 @@ class MenuBarController: NSObject {
         settingsWindow = window
         
         // Handle window close to release reference
-        NotificationCenter.default.addObserver(
+        windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
         ) { [weak self] _ in
             self?.settingsWindow = nil
+            if let observer = self?.windowCloseObserver {
+                NotificationCenter.default.removeObserver(observer)
+                self?.windowCloseObserver = nil
+            }
         }
         
         // Show window
@@ -130,5 +135,12 @@ class MenuBarController: NSObject {
     
     @objc func quit() {
         NSApplication.shared.terminate(nil)
+    }
+    
+    deinit {
+        // Clean up observer if still present
+        if let observer = windowCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 }

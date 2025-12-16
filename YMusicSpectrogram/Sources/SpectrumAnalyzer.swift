@@ -10,7 +10,7 @@ import Foundation
 
 class SpectrumAnalyzer: ObservableObject {
     // Published property for SwiftUI updates
-    @Published var spectrumBands: [Float] = Array(repeating: 0, count: 32)
+    @Published var spectrumBands: [Float]
     
     // FFT Configuration - larger size for better frequency resolution
     private let fftSize: Int = 4096
@@ -54,8 +54,9 @@ class SpectrumAnalyzer: ObservableObject {
     
     init() {
         // Load band count from settings
-        self.numberOfBands = SettingsManager.shared.bandCount
-        self.spectrumBands = Array(repeating: 0, count: numberOfBands)
+        let initialBandCount = SettingsManager.shared.bandCount
+        self.numberOfBands = initialBandCount
+        self.spectrumBands = Array(repeating: 0, count: initialBandCount)
         
         self.realParts = [Float](repeating: 0, count: fftSize)
         self.imaginaryParts = [Float](repeating: 0, count: fftSize)
@@ -78,9 +79,13 @@ class SpectrumAnalyzer: ObservableObject {
     
     // Update band count dynamically
     func updateBandCount(_ count: Int) {
-        numberOfBands = count
-        spectrumBands = Array(repeating: 0, count: numberOfBands)
-        computeBandBoundaries()
+        // Ensure UI updates happen on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.numberOfBands = count
+            self.spectrumBands = Array(repeating: 0, count: count)
+            self.computeBandBoundaries()
+        }
     }
     
     deinit {
