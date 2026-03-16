@@ -8,8 +8,10 @@
 //  - Uses ScreenCaptureKit (macOS 13+) to capture system audio streams
 //  - Requires Screen Recording permission in System Settings
 //  - Captures audio from all system output without virtual audio drivers
+//  - Automatically restarts capture after screen lock/unlock
 //
 
+import AppKit
 import CoreAudio
 import CoreMedia
 import Foundation
@@ -19,6 +21,9 @@ import ScreenCaptureKit
 class AudioCaptureManager: NSObject {
     private let spectrumAnalyzer: SpectrumAnalyzer
     private var isCapturing = false
+    
+    // Track if capture was active before screen sleep (to restore on wake)
+    private var wasCapturingBeforeSleep = false
     
     // ScreenCaptureKit properties
     private var stream: SCStream?
@@ -30,6 +35,50 @@ class AudioCaptureManager: NSObject {
     init(spectrumAnalyzer: SpectrumAnalyzer) {
         self.spectrumAnalyzer = spectrumAnalyzer
         super.init()
+        
+        // Register for screen sleep/wake notifications to handle lock screen
+        setupScreenSleepWakeObservers()
+    }
+    
+    private func setupScreenSleepWakeObservers() {
+        let workspace = NSWorkspace.shared
+        let notificationCenter = workspace.notificationCenter
+        
+        // Observe screen sleep (includes lock screen)
+        notificationCenter.addObserver(
+            self,
+            selector: #selector(handleScreenDidSleep),
+            name: NSWorkspace.screensDidSleepNotification,
+            object: nil
+        )
+        
+        // Observe screen wake (includes unlock)
+        notificationCenter.addObserver(
+            self,
+            selector: #selector(handleScreenDidWake),
+            name: NSWorkspace.screensDidWakeNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func handleScreenDidSleep() {
+        print("🔒 Screen did sleep - pausing capture")
+        wasCapturingBeforeSleep = isCapturing
+        if isCapturing {
+            stopCaptureInternal()
+        }
+    }
+    
+    @objc private func handleScreenDidWake() {
+        print("🔓 Screen did wake - checking if capture needs to restart")
+        if wasCapturingBeforeSleep {
+            // Delay restart slightly to ensure system is fully awake
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                print("🔄 Restarting audio capture after screen wake")
+                self.startCapture()
+            }
+        }
     }
     
     func startCapture() {
@@ -46,6 +95,12 @@ class AudioCaptureManager: NSObject {
     }
     
     func stopCapture() {
+        // Reset the sleep tracking flag when user manually stops
+        wasCapturingBeforeSleep = false
+        stopCaptureInternal()
+    }
+    
+    private func stopCaptureInternal() {
         guard isCapturing else { return }
         
         // Stop ScreenCaptureKit stream
@@ -148,6 +203,8 @@ class AudioCaptureManager: NSObject {
     }
     
     deinit {
+        // Remove notification observers
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         stopCapture()
     }
 }
