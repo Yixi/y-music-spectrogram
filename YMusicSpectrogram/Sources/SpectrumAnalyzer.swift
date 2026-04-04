@@ -38,12 +38,16 @@ class SpectrumAnalyzer: ObservableObject {
     private let attackFactor: Float = 0.7   // Fast attack (higher = faster response to increases)
     private let releaseFactor: Float = 0.85 // Slower release (higher = slower decay)
     
-    // dB range for normalization - tighter range for more visible dynamics
-    private let dbFloor: Float = -50
-    private let dbCeiling: Float = -10
-    
+    // dB range for normalization - adjusted by sensitivity setting
+    private var dbFloor: Float = -50
+    private var dbCeiling: Float = -10
+
     // Reference level for normalization (adjusts sensitivity)
     private let referenceLevel: Float = 1e-6
+
+    // Base dB range values (before sensitivity adjustment)
+    private let baseDbFloor: Float = -50
+    private let baseDbCeiling: Float = -10
     
     // Peak tracking for auto-gain
     private var peakLevel: Float = 0.001
@@ -75,11 +79,26 @@ class SpectrumAnalyzer: ObservableObject {
         
         // Generate Blackman-Harris window (better sidelobe suppression than Hann)
         vDSP_blkman_window(&window, vDSP_Length(fftSize), 0)
-        
+
+        // Apply initial sensitivity from settings
+        let initialSensitivity = Float(SettingsManager.shared.sensitivity)
+        dbFloor = baseDbFloor / initialSensitivity
+        dbCeiling = baseDbCeiling * initialSensitivity
+
         // Pre-compute frequency band boundaries
         computeBandBoundaries()
     }
     
+    // Update sensitivity - adjusts dB range for FFT analysis
+    func updateSensitivity(_ value: Double) {
+        configurationLock.lock()
+        // Higher sensitivity = narrower dB range = more responsive to quiet sounds
+        let factor = Float(value)
+        dbFloor = baseDbFloor / factor   // e.g. 1.5x → -33 (narrower range, more sensitive)
+        dbCeiling = baseDbCeiling * factor // e.g. 1.5x → -15
+        configurationLock.unlock()
+    }
+
     // Update band count dynamically
     func updateBandCount(_ count: Int) {
         let clamped = max(1, count)
@@ -233,13 +252,17 @@ class SpectrumAnalyzer: ObservableObject {
         configurationLock.lock()
         let bandCountSnapshot = numberOfBands
         let boundariesSnapshot = bandBoundaries
+        let dbFloorSnapshot = dbFloor
+        let dbCeilingSnapshot = dbCeiling
         configurationLock.unlock()
 
         // Group frequencies into bands using snapshot boundaries
         let newBands = groupIntoFrequencyBands(
             normalizedMags,
             numberOfBands: bandCountSnapshot,
-            bandBoundaries: boundariesSnapshot
+            bandBoundaries: boundariesSnapshot,
+            dbFloor: dbFloorSnapshot,
+            dbCeiling: dbCeilingSnapshot
         )
         
         // Apply smoothing with separate attack/release for natural response
@@ -273,7 +296,9 @@ class SpectrumAnalyzer: ObservableObject {
     private func groupIntoFrequencyBands(
         _ magnitudes: [Float],
         numberOfBands: Int,
-        bandBoundaries: [(start: Int, end: Int)]
+        bandBoundaries: [(start: Int, end: Int)],
+        dbFloor: Float,
+        dbCeiling: Float
     ) -> [Float] {
         guard numberOfBands > 0 else { return [] }
 

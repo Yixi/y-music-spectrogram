@@ -19,16 +19,26 @@ import ScreenCaptureKit
 
 @available(macOS 13.0, *)
 class AudioCaptureManager: NSObject {
+    // Error types for capture failures
+    enum CaptureError {
+        case permissionDenied
+        case permissionNotDecided
+        case captureFailed(Error)
+    }
+
     private let spectrumAnalyzer: SpectrumAnalyzer
-    private var isCapturing = false
-    
+    private(set) var isCapturing = false
+
+    // Error callback for UI feedback
+    var onError: ((CaptureError) -> Void)?
+
     // Track if capture was active before screen sleep (to restore on wake)
     private var wasCapturingBeforeSleep = false
-    
+
     // ScreenCaptureKit properties
     private var stream: SCStream?
     private var streamOutput: AudioStreamOutput?
-    
+
     // Audio format configuration
     private let sampleRate: Double = 48000.0 // ScreenCaptureKit uses 48kHz
     
@@ -83,13 +93,16 @@ class AudioCaptureManager: NSObject {
     
     func startCapture() {
         guard !isCapturing else { return }
-        
+
         // Try to start ScreenCaptureKit audio capture
         Task {
             do {
                 try await startScreenCaptureAudio()
             } catch {
                 print("⚠️ ScreenCaptureKit error: \(error.localizedDescription)")
+                DispatchQueue.main.async { [weak self] in
+                    self?.onError?(.captureFailed(error))
+                }
             }
         }
     }
@@ -122,16 +135,23 @@ class AudioCaptureManager: NSObject {
     }
     
     private func startScreenCaptureAudio() async throws {
-        // Check if we can get screen recording permission FIRST
-        // This triggers the system prompt if not yet determined
-        guard await requestScreenRecordingPermission() else {
-            // If false, it means either denied OR user hasn't responded yet.
-            // Since we can't wait for the response, we have to assume we can't proceed with SCKit right now.
-            throw NSError(
-                domain: "AudioCaptureManager",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Screen recording permission not granted"]
-            )
+        // Check permission status before requesting
+        let preflightResult = CGPreflightScreenCaptureAccess()
+
+        if !preflightResult {
+            // Permission not yet granted — request it (triggers system prompt on first call)
+            let requestResult = CGRequestScreenCaptureAccess()
+            if !requestResult {
+                // CGRequestScreenCaptureAccess returned false → user denied the permission
+                DispatchQueue.main.async { [weak self] in
+                    self?.onError?(.permissionDenied)
+                }
+                throw NSError(
+                    domain: "AudioCaptureManager",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Screen recording permission not granted"]
+                )
+            }
         }
         
         // Get available content for screen capture
@@ -188,19 +208,6 @@ class AudioCaptureManager: NSObject {
         print("ℹ️ Capturing all system audio output")
     }
     
-    private func requestScreenRecordingPermission() async -> Bool {
-        // Check if we already have permission
-        let canRecord = CGPreflightScreenCaptureAccess()
-        print("🔍 Preflight screen capture access: \(canRecord)")
-        
-        if canRecord {
-            return true
-        }
-        
-        // Request permission
-        print("⚠️ Requesting screen capture access...")
-        return CGRequestScreenCaptureAccess()
-    }
     
     deinit {
         // Remove notification observers

@@ -9,9 +9,12 @@ import SwiftUI
 
 struct SpectrumVisualizerView: View {
     @ObservedObject var spectrumAnalyzer: SpectrumAnalyzer
-    
-    private let barSpacing: CGFloat = 1.0
-    
+    @ObservedObject private var settings = SettingsManager.shared
+
+    private var barSpacing: CGFloat {
+        CGFloat(settings.barSpacing)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: barSpacing) {

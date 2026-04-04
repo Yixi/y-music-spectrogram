@@ -7,10 +7,11 @@
 
 import Foundation
 import SwiftUI
+import ServiceManagement
 
 class SettingsManager: ObservableObject {
     static let shared = SettingsManager()
-    
+
     // Settings keys
     private enum Keys {
         static let bandCount = "spectrumBandCount"
@@ -18,6 +19,9 @@ class SettingsManager: ObservableObject {
         static let baseColorHue = "baseColorHue"
         static let baseColorSaturation = "baseColorSaturation"
         static let baseColorBrightness = "baseColorBrightness"
+        static let barSpacing = "barSpacing"
+        static let sensitivity = "sensitivity"
+        static let launchAtLogin = "launchAtLogin"
     }
     
     // Published properties for reactive UI updates
@@ -50,7 +54,26 @@ class SettingsManager: ObservableObject {
             UserDefaults.standard.set(baseColorBrightness, forKey: Keys.baseColorBrightness)
         }
     }
-    
+
+    @Published var barSpacing: Double {
+        didSet {
+            UserDefaults.standard.set(barSpacing, forKey: Keys.barSpacing)
+        }
+    }
+
+    @Published var sensitivity: Double {
+        didSet {
+            UserDefaults.standard.set(sensitivity, forKey: Keys.sensitivity)
+        }
+    }
+
+    @Published var launchAtLogin: Bool {
+        didSet {
+            UserDefaults.standard.set(launchAtLogin, forKey: Keys.launchAtLogin)
+            updateLoginItem()
+        }
+    }
+
     // Color scheme options
     enum ColorScheme: String, CaseIterable {
         case rainbow = "Rainbow"
@@ -58,18 +81,43 @@ class SettingsManager: ObservableObject {
         case blueToRed = "Blue to Red"
         case monochrome = "Monochrome"
         case custom = "Custom"
+
+        var displayName: String {
+            switch self {
+            case .rainbow: return "彩虹"
+            case .greenToRed: return "绿→红"
+            case .blueToRed: return "蓝→红"
+            case .monochrome: return "单色"
+            case .custom: return "自定义"
+            }
+        }
     }
     
     private init() {
         // Load saved settings or use defaults
         self.bandCount = UserDefaults.standard.object(forKey: Keys.bandCount) as? Int ?? 32
-        
+
         let colorSchemeRaw = UserDefaults.standard.string(forKey: Keys.colorScheme) ?? ColorScheme.greenToRed.rawValue
         self.colorScheme = ColorScheme(rawValue: colorSchemeRaw) ?? .greenToRed
-        
+
         self.baseColorHue = UserDefaults.standard.object(forKey: Keys.baseColorHue) as? Double ?? 0.35
         self.baseColorSaturation = UserDefaults.standard.object(forKey: Keys.baseColorSaturation) as? Double ?? 0.8
         self.baseColorBrightness = UserDefaults.standard.object(forKey: Keys.baseColorBrightness) as? Double ?? 0.9
+        self.barSpacing = UserDefaults.standard.object(forKey: Keys.barSpacing) as? Double ?? 1.0
+        self.sensitivity = UserDefaults.standard.object(forKey: Keys.sensitivity) as? Double ?? 1.0
+        self.launchAtLogin = UserDefaults.standard.object(forKey: Keys.launchAtLogin) as? Bool ?? false
+    }
+
+    private func updateLoginItem() {
+        do {
+            if launchAtLogin {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            print("⚠️ Failed to update login item: \(error.localizedDescription)")
+        }
     }
     
     // Get color for a specific bar based on current color scheme

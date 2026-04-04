@@ -25,6 +25,13 @@ sed -e "s/\$(EXECUTABLE_NAME)/$APP_NAME/" \
     -e "s/\$(MACOSX_DEPLOYMENT_TARGET)/13.0/" \
     "$INFO_PLIST_SRC" > "$INFO_PLIST_DEST"
 
+# Copy app icon
+ICON_SRC="YMusicSpectrogram/Resources/AppIcon.icns"
+if [ -f "$ICON_SRC" ]; then
+    cp "$ICON_SRC" "$RESOURCES_DIR/"
+    echo "App icon copied"
+fi
+
 # Set executable permissions
 chmod +x "$MACOS_DIR/$APP_NAME"
 
