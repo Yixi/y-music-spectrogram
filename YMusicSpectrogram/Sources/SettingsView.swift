@@ -129,7 +129,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
-        .background(.ultraThinMaterial)
+        .background(.clear)
         .frame(width: 480, height: 520)
     }
 }

@@ -5,6 +5,10 @@
 ![Menu Bar Spectrogram](https://img.shields.io/badge/macOS-13.0+-blue.svg)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange.svg)
 
+![菜单栏频谱效果](assets/image.png)
+
+![设置窗口](assets/menu.png)
+
 ## 功能特点
 
 - 🎵 **实时音频可视化**：在菜单栏中显示实时频谱分析

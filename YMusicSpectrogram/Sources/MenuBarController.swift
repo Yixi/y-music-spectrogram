@@ -151,8 +151,26 @@ class MenuBarController: NSObject, NSMenuDelegate {
         window.title = "频谱设置"
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .clear
+        window.isOpaque = false
         window.isMovableByWindowBackground = true
-        window.contentView = NSHostingView(rootView: settingsView)
+
+        // Use NSVisualEffectView as background for frosted glass effect
+        let visualEffectView = NSVisualEffectView()
+        visualEffectView.material = .hudWindow
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.state = .active
+        window.contentView = visualEffectView
+
+        let hostingView = NSHostingView(rootView: settingsView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        visualEffectView.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: visualEffectView.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: visualEffectView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor),
+        ])
+
         window.center()
         window.isReleasedWhenClosed = false
 
