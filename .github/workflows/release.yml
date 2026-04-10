@@ -1,0 +1,41 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon (M1) runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Release
+        run: swift build -c release
+
+      - name: Bundle App
+        run: |
+          chmod +x bundle.sh
+          ./bundle.sh
+
+      - name: Code Sign (ad-hoc)
+        run: codesign --force --deep --sign - .build/release/YMusicSpectrogram.app
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg-staging
+          cp -R .build/release/YMusicSpectrogram.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "YMusicSpectrogram" \
+            -srcfolder dmg-staging \
+            -ov -format UDZO \
+            YMusicSpectrogram-arm64.dmg
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: YMusicSpectrogram-arm64.dmg
+          generate_release_notes: true
